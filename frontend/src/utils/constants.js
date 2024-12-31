@@ -1,4 +1,4 @@
-export const URL = "https://api.g28xyz.nomoredomainswork.ru";
+export const URL = "http://api.scp.nomorepartiesco.ru/";
 
 export const MINIMUM_PASSWORD_LENGTH = 3;
 export const MINIMUM_USERNAME_LENGTH = 3;
