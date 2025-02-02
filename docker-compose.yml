@@ -6,7 +6,7 @@ services:
     env_file:
       - ./backend/.env
     ports:
-      - "4000:4000"
+      - "4000:3000"
     depends_on:
       - postgres
 
@@ -16,7 +16,7 @@ services:
       - "5432"
     env_file: ./backend/.env
     volumes:
-      - ./pg-data:/var/lib/postgresql/data/pgdata
+      - postgres_data:/var/lib/postgresql/data/pgdata
 
   frontend:
     build:
@@ -24,3 +24,5 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8081:80"
+volumes:
+  postgres_data:
