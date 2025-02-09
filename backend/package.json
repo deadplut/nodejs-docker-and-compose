@@ -39,7 +39,16 @@
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
-    "typeorm": "^0.3.20"
+    "typeorm": "^0.3.20",
+    "cookie-parser": "^1.4.6",
+    "express-session": "^1.18.0",
+    "nest-winston": "^1.9.4",
+    "rimraf": "^3.0.2",
+    "winston": "^3.11.0",
+ "graphql": "^16.8.1",
+    "helmet": "^7.1.0",
+    "@nestjs/graphql": "^12.1.1",
+    "@nestjs/schematics": "^9.0.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
