@@ -1,14 +1,15 @@
-import { PickType } from '@nestjs/swagger';
-import { Offer } from '../entities/offer.entity';
-import { IsNotEmpty, IsNumber } from 'class-validator';
-import { ERROR_MESSAGES } from 'src/utils/constants';
+import { IsBoolean, IsNumber, Matches } from 'class-validator';
 
-export class CreateOfferDto extends PickType(Offer, ['amount', 'hidden']) {
-  @IsNumber(undefined, {
-    message: JSON.stringify({ itemId: ERROR_MESSAGES.VALIDATION.IS_NUMBER }),
+export class CreateOfferDto {
+  @IsNumber()
+  item: number;
+
+  @IsNumber()
+  @Matches(/^\d+(\.\d{1,2})?$/, {
+    message: 'Amount must be a valid number with up to 2 decimal places',
   })
-  @IsNotEmpty({
-    message: JSON.stringify({ itemId: ERROR_MESSAGES.VALIDATION.NOT_EMPTY }),
-  })
-  itemId: number;
+  amount: number;
+
+  @IsBoolean()
+  hidden: boolean;
 }

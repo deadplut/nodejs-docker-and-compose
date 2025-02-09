@@ -1,133 +1,117 @@
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { HashService } from 'src/hash/hash.service';
+import { Repository } from 'typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { Like, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
-import { InjectRepository } from '@nestjs/typeorm';
-import { plainToInstance } from 'class-transformer';
-import { Wishlist } from 'src/wishlists/entities/wishlist.entity';
-import { HandleLogger } from 'src/utils/handle-logger';
-import { Logger } from 'winston';
-import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 
 @Injectable()
 export class UsersService {
   constructor(
-    @InjectRepository(User) private readonly userRepository: Repository<User>,
-    @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly hashService: HashService,
   ) {}
-  /**
-   * создать модель пользователя
-   * @param user данные о пользователе
-   */
-  @HandleLogger('UsersService')
-  private _genUser(user: Partial<User>) {
-    return plainToInstance(User, user);
-  }
-  /**
-   * создать пользователя
-   * @param createUserDto данные о пользователе
-   */
-  @HandleLogger('UsersService')
-  create(createUserDto: CreateUserDto): Promise<User> {
-    return this.saveUser(createUserDto);
-  }
-  /**
-   * поиск пользователей по введенному значению
-   * @param searchText значение поиска
-   */
-  @HandleLogger('UsersService')
-  findUsersByQuerySearch(searchText: string) {
-    searchText = '%' + searchText + '%';
-    return this.userRepository.find({
-      where: [{ username: Like(searchText) }, { email: Like(searchText) }],
-      order: { createdAt: 'ASC' },
+
+  async create(createUserDto: CreateUserDto): Promise<User> {
+    const user_ib_db = this.userRepository.findOne({
+      where: { email: createUserDto.email, name: createUserDto.name },
     });
-  }
-  /**
-   * сохранить изменения в данных о пользователе
-   * @param user данные о пользователе
-   */
-  @HandleLogger('UsersService')
-  saveUser(user: Partial<User>) {
-    return this.userRepository.save(this._genUser(user));
-  }
-  /**
-   * добавить коллекцию
-   * @param userId уникальный идентификатор пользователя
-   * @param wishlist данные о добавляемой коллекции
-   */
-  @HandleLogger('UsersService')
-  async addWishlist(userId: number, wishlist: Wishlist) {
-    const user = await this.findWishlists(userId);
-    user.wishlists.push(wishlist);
+    if (user_ib_db) {
+      throw new ForbiddenException(
+        'Пользователь с таким именем или email уже существует',
+      );
+    }
+    const user = this.userRepository.create(createUserDto);
+
     return this.userRepository.save(user);
   }
-  /**
-   * получить данные о пользователе с возможностью выбора столбцов
-   * @param username юзернейм пользователя
-   * @param select выбор столбцов которые необходимо получить
-   */
-  @HandleLogger('UsersService')
-  findOneWithSelect(username: string, select: (keyof User)[] = []) {
-    return this.userRepository.findOne({
-      where: { username },
-      select,
-    });
-  }
-  /**
-   * найти пользователя по уникальному идентификатору
-   * @param id уникальный идентификатор пользователя
-   */
-  @HandleLogger('UsersService')
-  findById(id: number) {
-    return this.userRepository.findOneBy({ id });
-  }
-  /**
-   * поиск пользователя по юзернейму или почте
-   * @param username юзернейм пользователя
-   * @param email почти пользователя
-   */
-  @HandleLogger('UsersService')
-  findByNameOrEmail(username?: string, email?: string) {
-    return this.userRepository.findOne({ where: [{ username }, { email }] });
-  }
-  /**
-   * поиск всех существующих пользователей
-   */
-  @HandleLogger('UsersService')
-  findAll(): Promise<User[]> {
+
+  async findAll(): Promise<User[]> {
     return this.userRepository.find();
   }
-  /**
-   * обновление данных о пользователе
-   * @param id уникальный идентификатор пользователя
-   * @param updateUserDto обновляемые данные о пользователе
-   */
-  @HandleLogger('UsersService')
-  async updateOne(id: number, updateUserDto: UpdateUserDto) {
-    return this.userRepository.update({ id }, this._genUser(updateUserDto));
-  }
-  /**
-   * поиск пользователя с доп столбцом - подарки (wishes)
-   * @param id уникальный идентификатор пользователя
-   */
-  @HandleLogger('UsersService')
-  findWishes(id: number) {
-    return this.userRepository.findOne({
-      where: { id },
-      relations: ['wishes'],
+
+  async findById(id: number): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { id: id },
     });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    return user;
   }
-  /**
-   * поиск пользователя с доп столбцом - коллекции (wishlists)
-   * @param id уникальный идентификатор пользователя
-   */
-  @HandleLogger('UsersService')
-  findWishlists(id: number) {
-    return this.userRepository.findOne({
-      where: { id },
-      relations: ['wishlists'],
+
+  async findByName(name: string): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { name: name },
     });
+
+    if (!user) {
+      throw new NotFoundException(`User with name ${name} not found`);
+    }
+
+    return user;
+  }
+
+  async findByFields(query: string): Promise<User[]> {
+    const users = await this.userRepository.find({
+      where: [{ name: query }, { email: query }],
+    });
+    return users;
+  }
+
+  async updateOne(
+    id: number,
+    updateUserDto: UpdateUserDto,
+    userId: number,
+  ): Promise<User> {
+    if (id != userId) {
+      throw new ForbiddenException('You are not the owner of this profi;e');
+    }
+    const user_ib_db = this.userRepository.findOne({
+      where: { email: updateUserDto.email, name: updateUserDto.name },
+    });
+    if (user_ib_db) {
+      throw new ForbiddenException(
+        'Пользователь с таким именем или email уже существует',
+      );
+    }
+
+    const hashedPassword = await this.hashService.hashPassword(
+      updateUserDto.password,
+    );
+    const user = await this.userRepository.findOne({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    Object.assign(user, { ...updateUserDto, password: hashedPassword });
+
+    return this.userRepository.save(user);
+  }
+
+  async removeOne(id: number, userId: number): Promise<void> {
+    if (id != userId) {
+      throw new ForbiddenException('You are not the owner of this profi;e');
+    }
+    const result = await this.userRepository.delete(id);
+
+    if (result.affected === 0) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+  }
+
+  findOne(id: number) {
+    return `This action returns a #${id} wish`;
   }
 }

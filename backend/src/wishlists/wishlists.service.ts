@@ -1,9 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { CreateWishlistDto } from './dto/create-wishlist.dto';
-import { Repository } from 'typeorm';
-import { Wishlist } from './entities/wishlist.entity';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { User } from 'src/users/entities/user.entity';
+import { Repository } from 'typeorm';
+import { CreateWishlistDto } from './dto/create-wishlist.dto';
 import { UpdateWishlistDto } from './dto/update-wishlist.dto';
+import { Wishlist } from './entities/wishlist.entity';
 
 @Injectable()
 export class WishlistsService {
@@ -11,39 +16,60 @@ export class WishlistsService {
     @InjectRepository(Wishlist)
     private readonly wishlistRepository: Repository<Wishlist>,
   ) {}
-  /**
-   * создать коллекцию подарков
-   * @param createWishlistDto - данные о новой коллекции подарков
-   */
-  async create(createWishlistDto: CreateWishlistDto) {
-    return await this.wishlistRepository.save(createWishlistDto);
+
+  create(createWishlistDto: CreateWishlistDto, user: User): Promise<Wishlist> {
+    const wishlist = this.wishlistRepository.create(createWishlistDto);
+    return this.wishlistRepository.save({ ...wishlist, user: user });
   }
-  /**
-   * поиск всех коллекций подарков
-   */
-  findAll() {
+
+  findAll(): Promise<Wishlist[]> {
     return this.wishlistRepository.find();
   }
-  /**
-   * поиск коллекции подарков по уникальному идентификатору
-   * @param id - уникальный идентификатор коллекции
-   */
-  findOneById(id: number) {
-    return this.wishlistRepository.findOneBy({ id });
+
+  async findById(id: number): Promise<Wishlist> {
+    const wishlist = await this.wishlistRepository.findOne({
+      where: { id: id },
+    });
+
+    if (!wishlist) {
+      throw new NotFoundException(`wishlist with ID ${id} not found`);
+    }
+
+    return wishlist;
   }
-  /**
-   * обновление коллекции подарков
-   * @param id - уникальный идентификатор коллекции
-   * @param updateWishlistDto - обновленные данные о коллекции
-   */
-  update(id: number, updateWishlistDto: UpdateWishlistDto) {
-    return this.wishlistRepository.update({ id }, updateWishlistDto);
+
+  async updateOne(
+    id: number,
+    updateWishlistDto: UpdateWishlistDto,
+    userId: number,
+  ): Promise<Wishlist> {
+    const wishlist = await this.wishlistRepository.findOne({
+      where: { id },
+    });
+
+    if (!wishlist) {
+      throw new NotFoundException(`Offer with ID ${id} not found`);
+    }
+
+    if (wishlist.user.id == userId) {
+      throw new ForbiddenException('You are not the owner of this wishlist');
+    }
+
+    Object.assign(wishlist, updateWishlistDto);
+
+    return this.wishlistRepository.save(wishlist);
   }
-  /**
-   * удаление коллекции подарков
-   * @param id уникальный идентификатор коллекции
-   */
-  delete(id: number) {
-    return this.wishlistRepository.delete({ id });
+
+  async removeOne(id: number, userId: number): Promise<void> {
+    const wishlist = await this.wishlistRepository.findOne({
+      where: { id: id },
+    });
+    if (!wishlist) {
+      throw new NotFoundException(`wishlist with ID ${id} not found`);
+    }
+    if (wishlist.user.id == userId) {
+      throw new ForbiddenException('You are not the owner of this wishlist');
+    }
+    await this.wishlistRepository.delete(id);
   }
 }

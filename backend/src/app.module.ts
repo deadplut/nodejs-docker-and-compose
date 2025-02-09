@@ -1,70 +1,38 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule } from '@nestjs/config';
-
+import { AuthModule } from './auth/auth.module';
+import { getDatabaseConfig } from './config/database.config';
+import { validationSchema } from './config/validation.config';
+import { HashService } from './hash/hash.service';
+import { OffersModule } from './offers/offers.module';
 import { UsersModule } from './users/users.module';
 import { WishesModule } from './wishes/wishes.module';
 import { WishlistsModule } from './wishlists/wishlists.module';
-import { OffersModule } from './offers/offers.module';
-import { AuthModule } from './auth/auth.module';
-
-import configuration, { ConfigurationService, ormConfig } from './config';
-import { JwtService } from '@nestjs/jwt';
-import { WinstonModule } from 'nest-winston';
-import * as winston from 'winston';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
-import { JwtAuthGuard } from './auth/guards/jwt.guard';
-
-const winstonFactory = {
-  async useFactory() {
-    const transports = [
-      new winston.transports.Console({ format: winston.format.simple() }),
-      new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    ];
-    process.env.NODE_ENV === 'dev' &&
-      transports.push(
-        new winston.transports.File({
-          filename: 'debug.log',
-          level: 'info',
-        }),
-      );
-    return {
-      levels: {
-        critical_error: 0,
-        error: 1,
-        special_warning: 2,
-        another_log_level: 3,
-        info: 4,
-      },
-      transports,
-    };
-  },
-};
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [ormConfig, configuration],
-      expandVariables: true,
-      envFilePath: `.env`,
+      validationSchema,
     }),
-    WinstonModule.forRootAsync(winstonFactory),
-    ThrottlerModule.forRoot([{ ttl: 60, limit: 10 }]),
-    TypeOrmModule.forRootAsync({ useFactory: ormConfig }),
+
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) =>
+        getDatabaseConfig(configService),
+    }),
+
     UsersModule,
+
     WishesModule,
+
     WishlistsModule,
+
     OffersModule,
+
     AuthModule,
   ],
-  controllers: [],
-  providers: [
-    JwtService,
-    ConfigurationService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
-  ],
+  providers: [HashService],
 })
 export class AppModule {}

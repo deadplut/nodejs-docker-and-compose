@@ -1,73 +1,75 @@
 import {
-  Controller,
-  Post,
   Body,
-  NotFoundException,
+  Controller,
+  Delete,
   Get,
   Param,
-  ParseIntPipe,
-  BadRequestException,
+  Patch,
+  Post,
+  Request,
   UseGuards,
 } from '@nestjs/common';
-import { OffersService } from './offers.service';
+import { plainToInstance } from 'class-transformer';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { AuthenticatedRequest } from 'src/auth/interfaces/authenticated-request.interface';
+import { UsersService } from 'src/users/users.service';
 import { CreateOfferDto } from './dto/create-offer.dto';
-import { GetReqParam } from 'src/utils/get-req-param';
-import { User } from 'src/users/entities/user.entity';
-import { WishesService } from 'src/wishes/wishes.service';
-import { ERROR_MESSAGES } from 'src/utils/constants';
-import { JwtAuthGuard } from 'src/auth/guards/jwt.guard';
+import { offerResponseDto } from './dto/offer-response.dto';
+import { UpdateOfferDto } from './dto/update-offer.dto';
+import { Offer } from './entities/offer.entity';
+import { OffersService } from './offers.service';
 
 @Controller('offers')
-@UseGuards(JwtAuthGuard)
 export class OffersController {
   constructor(
     private readonly offersService: OffersService,
-    private readonly wishesService: WishesService,
+    private readonly usersService: UsersService,
   ) {}
 
+  @UseGuards(JwtAuthGuard)
   @Post()
   async create(
-    @GetReqParam('user') user: User,
+    @Request() req: AuthenticatedRequest,
     @Body() createOfferDto: CreateOfferDto,
-  ) {
-    const wishItem = await this.wishesService.findOneWithOptions(
-      createOfferDto.itemId,
-      { relations: ['owner'] },
-    );
-    // не найден
-    if (!wishItem) throw new NotFoundException(ERROR_MESSAGES.WISH.NOT_FOUND);
-    // нельзя вносить деньги на свой подарок
-    if (wishItem.owner.id === user.id)
-      throw new BadRequestException(ERROR_MESSAGES.OFFER.SELF_OFFER);
-    // деньги уже собраны
-    if (wishItem.price <= parseInt(wishItem.raised?.toString(), 10))
-      throw new BadRequestException(ERROR_MESSAGES.OFFER.IS_COMPLETE);
-    // превышает стоимость
-    if (
-      createOfferDto.amount >
-      wishItem.price - parseInt(wishItem.raised?.toString(), 10)
-    )
-      throw new BadRequestException(ERROR_MESSAGES.OFFER.MUCH_PRICE);
-
-    await this.offersService.create({
-      ...createOfferDto,
-      user,
-      item: wishItem,
-    });
-
-    wishItem.raised =
-      (parseInt(wishItem.raised?.toString(), 10) || 0) + createOfferDto.amount;
-    await this.wishesService.saveWish(wishItem);
-    return {};
+  ): Promise<Offer> {
+    const user = await this.usersService.findById(req.user.userId);
+    return this.offersService.create(createOfferDto, user);
   }
 
-  @Get(':id')
-  findById(@Param('id', ParseIntPipe) id: number) {
-    return this.offersService.findById(id);
-  }
-
+  @UseGuards(JwtAuthGuard)
   @Get()
-  findAll() {
-    return this.offersService.findAll();
+  async findAll(): Promise<offerResponseDto[]> {
+    const offers = await this.offersService.findAll();
+    return plainToInstance(offerResponseDto, offers, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id')
+  async findOne(@Param('id') id: string): Promise<offerResponseDto> {
+    const offer = await this.offersService.findById(+id);
+    return plainToInstance(offerResponseDto, offer, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id')
+  update(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() updateOfferDto: UpdateOfferDto,
+  ): Promise<Offer> {
+    return this.offersService.updateOne(+id, updateOfferDto, req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  remove(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.offersService.removeOne(+id, req.user.userId);
   }
 }

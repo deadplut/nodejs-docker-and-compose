@@ -1,103 +1,106 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Param,
-  ParseIntPipe,
+  Controller,
   Delete,
-  NotFoundException,
-  BadRequestException,
+  Get,
+  Param,
   Patch,
+  Post,
+  Request,
   UseGuards,
 } from '@nestjs/common';
-import { WishesService } from './wishes.service';
+import { plainToInstance } from 'class-transformer';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { AuthenticatedRequest } from 'src/auth/interfaces/authenticated-request.interface';
+import { UsersService } from 'src/users/users.service';
 import { CreateWishDto } from './dto/create-wish.dto';
-import { GetReqParam } from 'src/utils/get-req-param';
-import { User } from 'src/users/entities/user.entity';
-import { ERROR_MESSAGES } from 'src/utils/constants';
 import { UpdateWishDto } from './dto/update-wish.dto';
-import { Public } from 'src/auth/decorators/public.decorator';
-import { JwtAuthGuard } from 'src/auth/guards/jwt.guard';
+import { WishResponseDto } from './dto/wish-response.dto';
+import { WishesService } from './wishes.service';
 
 @Controller('wishes')
-@UseGuards(JwtAuthGuard)
 export class WishesController {
-  constructor(private readonly wishesService: WishesService) {}
+  constructor(
+    private readonly wishesService: WishesService,
+    private readonly usersService: UsersService,
+  ) {}
 
+  @UseGuards(JwtAuthGuard)
   @Post()
-  create(
-    @GetReqParam('user') user: User,
+  async create(
+    @Request() req: AuthenticatedRequest,
     @Body() createWishDto: CreateWishDto,
-  ) {
-    this.wishesService.create({ ...createWishDto, owner: user });
-    return {};
+  ): Promise<void> {
+    const user = await this.usersService.findById(req.user.userId);
+    this.wishesService.create(createWishDto, user);
   }
 
-  @Post(':id/copy')
-  async copyWish(
-    @GetReqParam('user') user: User,
-    @Param('id', ParseIntPipe) wishId: number,
-  ) {
-    const wish = await this.wishesService.findOneWithOptions(wishId, {
-      relations: ['owner'],
-    });
-    if (!wish.owner.id)
-      throw new NotFoundException(ERROR_MESSAGES.WISH.NOT_FOUND);
-    if (wish.owner.id === user.id)
-      throw new BadRequestException(ERROR_MESSAGES.WISH.OWNER_COPY);
-    await this.wishesService.copyWish(wish, user);
-    return {};
-  }
-
-  @Public()
   @Get('last')
-  findLast() {
-    return this.wishesService.findLast40();
+  async getLastWish(): Promise<WishResponseDto[]> {
+    const wishes = await this.wishesService.getLast();
+    return plainToInstance(WishResponseDto, wishes, {
+      excludeExtraneousValues: true,
+      groups: ['common'],
+    });
   }
 
-  @Public()
   @Get('top')
-  findTop() {
-    return this.wishesService.findTop10();
+  async getTopWish(): Promise<WishResponseDto[]> {
+    const wishes = await this.wishesService.getTop();
+    return plainToInstance(WishResponseDto, wishes, {
+      excludeExtraneousValues: true,
+      groups: ['common'],
+    });
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.wishesService.findOneById(id);
+  async findOne(@Param('id') id: string): Promise<WishResponseDto> {
+    const wish = await this.wishesService.findById(+id);
+    return plainToInstance(WishResponseDto, wish, {
+      excludeExtraneousValues: true,
+    });
   }
 
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
-  async updateWish(
-    @Param('id', ParseIntPipe) id: number,
+  async update(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
     @Body() updateWishDto: UpdateWishDto,
-    @GetReqParam('user', 'id') userId: number,
-  ) {
-    const wish = await this.wishesService.findOneWithOptions(id, {
-      relations: ['offers', 'owner'],
+  ): Promise<WishResponseDto> {
+    const wish = await this.wishesService.updateOne(
+      +id,
+      updateWishDto,
+      req.user.userId,
+    );
+    return plainToInstance(WishResponseDto, wish, {
+      excludeExtraneousValues: true,
     });
-    if (wish.owner.id !== userId)
-      throw new BadRequestException(ERROR_MESSAGES.WISH.EDIT_ANOTHER);
-    if (wish.offers.length && updateWishDto.price?.toString())
-      throw new BadRequestException(ERROR_MESSAGES.WISH.NOT_EDIT_PRICE);
-    this.wishesService.updateById(id, updateWishDto);
-    return {};
   }
 
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
-  async removeWish(
-    @Param('id', ParseIntPipe) id: number,
-    @GetReqParam('user') user: User,
-  ) {
-    const wish = await this.wishesService.findOneWithOptions(id, {
-      relations: ['owner', 'offers'],
+  remove(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.wishesService.removeOne(+id, req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/copy')
+  async copy(
+    @Request() req: AuthenticatedRequest,
+    @Body() id: number,
+  ): Promise<void> {
+    const user = await this.usersService.findById(req.user.userId);
+    const wish = await this.wishesService.findById(id);
+
+    const сreateWishDto = plainToInstance(CreateWishDto, wish, {
+      excludeExtraneousValues: true,
     });
-    if (!wish) throw new NotFoundException(ERROR_MESSAGES.WISH.NOT_FOUND);
-    if (wish.owner.id !== user.id)
-      throw new BadRequestException(ERROR_MESSAGES.WISH.DELETE_ANOTHER);
-    if (wish.offers.length)
-      throw new BadRequestException(ERROR_MESSAGES.WISH.HAS_OFFER);
-    await this.wishesService.removeById(wish.id);
-    return wish;
+
+    this.wishesService.create(сreateWishDto, user);
   }
 }

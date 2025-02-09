@@ -1,86 +1,81 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Param,
-  ParseIntPipe,
-  Patch,
+  Controller,
   Delete,
-  NotFoundException,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Request,
   UseGuards,
 } from '@nestjs/common';
-import { WishlistsService } from './wishlists.service';
-import { CreateWishlistDto } from './dto/create-wishlist.dto';
+import { plainToInstance } from 'class-transformer';
+import { AuthenticatedRequest } from 'src/auth/interfaces/authenticated-request.interface';
 import { UsersService } from 'src/users/users.service';
-import { GetReqParam } from 'src/utils/get-req-param';
+import { CreateWishlistDto } from './dto/create-wishlist.dto';
 import { UpdateWishlistDto } from './dto/update-wishlist.dto';
-import { Wish } from 'src/wishes/entities/wish.entity';
-import { WishesService } from 'src/wishes/wishes.service';
-import { ERROR_MESSAGES } from 'src/utils/constants';
-import { JwtAuthGuard } from 'src/auth/guards/jwt.guard';
+import { WishlistResponseDto } from './dto/wishlist-response.dto';
+import { WishlistsService } from './wishlists.service';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
-@Controller(['wishlistlists', 'wishlists'])
-@UseGuards(JwtAuthGuard)
+@Controller('wishlists')
 export class WishlistsController {
   constructor(
     private readonly wishlistsService: WishlistsService,
-    private readonly wishesService: WishesService,
     private readonly usersService: UsersService,
   ) {}
 
+  @UseGuards(JwtAuthGuard)
   @Post()
   async create(
-    @GetReqParam('user', 'id') userId: number,
+    @Request() req: AuthenticatedRequest,
     @Body() createWishlistDto: CreateWishlistDto,
   ) {
-    const items: Wish[] = [];
-    createWishlistDto.itemsId.map(async (id) =>
-      items.push(await this.wishesService.findOneById(id)),
-    );
-    const wishlist = await this.wishlistsService.create({
-      ...createWishlistDto,
-      items,
-    });
-    await this.usersService.addWishlist(userId, wishlist);
-    return wishlist;
+    const user = await this.usersService.findById(req.user.userId);
+    return this.wishlistsService.create(createWishlistDto, user);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get()
-  findAll() {
-    return this.wishlistsService.findAll();
+  async findAll() {
+    const wishlist = await this.wishlistsService.findAll();
+    return plainToInstance(WishlistResponseDto, wishlist, {
+      excludeExtraneousValues: true,
+    });
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    const wishlist = await this.wishlistsService.findOneById(id);
-    if (!wishlist)
-      throw new NotFoundException(ERROR_MESSAGES.WISHLIST.NOT_FOUND);
-    return wishlist;
+  async findOne(@Param('id') id: string): Promise<WishlistResponseDto> {
+    const wishlist = await this.wishlistsService.findById(+id);
+    return plainToInstance(WishlistResponseDto, wishlist, {
+      excludeExtraneousValues: true,
+    });
   }
 
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
-  async updateWishlist(
-    @Param('id', ParseIntPipe) id: number,
+  async update(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
     @Body() updateWishlistDto: UpdateWishlistDto,
-  ) {
-    const wishlist = await this.wishlistsService.findOneById(id);
-    if (!wishlist)
-      throw new NotFoundException(ERROR_MESSAGES.WISHLIST.NOT_FOUND);
-    const newWishlist = {
-      ...wishlist,
-      ...updateWishlistDto,
-    };
-    await this.wishlistsService.update(id, newWishlist);
-    return newWishlist;
+  ): Promise<WishlistResponseDto> {
+    const wish = await this.wishlistsService.updateOne(
+      +id,
+      updateWishlistDto,
+      req.user.userId,
+    );
+    return plainToInstance(WishlistResponseDto, wish, {
+      excludeExtraneousValues: true,
+    });
   }
 
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
-  async removeWishlist(@Param('id', ParseIntPipe) id: number) {
-    const wishlist = await this.wishlistsService.findOneById(id);
-    if (!wishlist)
-      throw new NotFoundException(ERROR_MESSAGES.WISHLIST.NOT_FOUND);
-    await this.wishlistsService.delete(id);
-    return wishlist;
+  remove(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.wishlistsService.removeOne(+id, req.user.userId);
   }
 }

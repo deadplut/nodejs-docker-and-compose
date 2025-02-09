@@ -1,90 +1,120 @@
 import {
-  Controller,
-  Get,
   Body,
-  Patch,
+  Controller,
+  Delete,
+  Get,
   Param,
-  Query,
+  Patch,
   Post,
-  NotFoundException,
-  ConflictException,
-  BadRequestException,
+  Request,
   UseGuards,
 } from '@nestjs/common';
-import { UsersService } from './users.service';
+import { plainToInstance } from 'class-transformer';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { AuthenticatedRequest } from 'src/auth/interfaces/authenticated-request.interface';
+import { WishResponseDto } from 'src/wishes/dto/wish-response.dto';
+import { CreateUserDto } from './dto/create-user.dto';
+import { FindUsersDto } from './dto/find-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from './entities/user.entity';
-import { GetReqParam } from 'src/utils/get-req-param';
-import { ERROR_MESSAGES } from 'src/utils/constants';
-import { JwtAuthGuard } from 'src/auth/guards/jwt.guard';
+import { UserProfileResponseDto } from './dto/user-profile-response.dto';
+import { UsersService } from './users.service';
 
 @Controller('users')
-@UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @UseGuards(JwtAuthGuard)
   @Get('me')
-  me(@GetReqParam('user') user: User) {
-    if (!user) throw new NotFoundException(ERROR_MESSAGES.AUTH.NOT_AUTH);
-    return this.usersService.findById(user.id);
+  async getCurrentUser(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<UserProfileResponseDto> {
+    const user = await this.usersService.findById(req.user.userId);
+    return plainToInstance(UserProfileResponseDto, user, {
+      excludeExtraneousValues: true,
+    });
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  async updateCurrentUser(
+    @Request() req: AuthenticatedRequest,
+    @Body() updateUserDto: UpdateUserDto,
+  ): Promise<UserProfileResponseDto> {
+    const user = await this.usersService.updateOne(
+      req.user.userId,
+      updateUserDto,
+      req.user.userId,
+    );
+    return plainToInstance(UserProfileResponseDto, user, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me/wishes')
+  async getCurrentUserWithWishes(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<WishResponseDto[]> {
+    const user = await this.usersService.findById(req.user.userId);
+    return plainToInstance(WishResponseDto, user.wishes, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':username')
+  async findUserByUsername(
+    @Param('username') username: string,
+  ): Promise<WishResponseDto[]> {
+    const user = await this.usersService.findByName(username);
+    return plainToInstance(WishResponseDto, user.wishes, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get(':username/wishes')
-  async getUserWishes(
-    @Param('username') name: string,
-    @GetReqParam('user', 'id') id: number,
-  ) {
-    const userId =
-      name === 'me' ? id : (await this.usersService.findByNameOrEmail(name)).id;
-    const user = await this.usersService.findWishes(userId);
-    if (user.wishes) {
-      return user.wishes;
-    }
-    throw new NotFoundException(ERROR_MESSAGES.WISH.EMPTY);
+  findUserWishes(@Param('username') username: string) {
+    return this.usersService.findByName(username);
   }
 
-  @Get('find')
-  findUserByQuerySearch(@Query('query') searchQuery: string) {
-    return this.usersService.findUsersByQuerySearch(searchQuery);
+  @UseGuards(JwtAuthGuard)
+  @Post('find')
+  async findMany(
+    @Body() findUsersDto: FindUsersDto,
+  ): Promise<UserProfileResponseDto[]> {
+    const { query } = findUsersDto;
+    const users = await this.usersService.findByFields(query);
+    return plainToInstance(UserProfileResponseDto, users, {
+      excludeExtraneousValues: true,
+    });
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Post()
+  create(@Body() createUserDto: CreateUserDto) {
+    return this.usersService.create(createUserDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get()
   findAll() {
     return this.usersService.findAll();
   }
 
-  @Get(':username')
-  async findOne(@Param('username') username: string) {
-    const user = await this.usersService.findByNameOrEmail(username);
-    if (!user) throw new BadRequestException(ERROR_MESSAGES.USER.NOT_FOUND);
-    return user;
-  }
-
-  @Patch('me')
-  async update(
-    @GetReqParam('user') user: User,
-    @Body() userData: UpdateUserDto,
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id')
+  update(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
   ) {
-    if (!user) throw new NotFoundException(ERROR_MESSAGES.USER.NOT_FOUND);
-
-    const findUser = await this.usersService.findByNameOrEmail(
-      userData.username,
-      userData.email,
-    );
-
-    if (findUser && findUser.id !== user.id) {
-      if (findUser.username === userData.username)
-        throw new ConflictException(ERROR_MESSAGES.USER.EXISTS_NAME);
-
-      if (findUser.email === userData.email)
-        throw new ConflictException(ERROR_MESSAGES.USER.EXISTS_EMAIL);
-    }
-
-    return this.usersService.updateOne(user.id, userData);
+    return this.usersService.updateOne(+id, updateUserDto, req.user.userId);
   }
 
-  @Post('find')
-  _findUserByQuerySearch(@Body('query') query: string) {
-    return this.findUserByQuerySearch(query);
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  remove(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.usersService.removeOne(+id, req.user.userId);
   }
 }

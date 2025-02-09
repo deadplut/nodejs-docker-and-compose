@@ -1,38 +1,20 @@
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-local';
-import { UsersService } from 'src/users/users.service';
-import { BcryptService } from 'src/helpers/bcrypt.service';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { ERROR_MESSAGES, NAME_LOCAL_AUTH_GUARD } from 'src/utils/constants';
+import { AuthService } from '../auth.service';
+import { ISanitizedUser } from '../interfaces/sanitized-user.interface';
 
 @Injectable()
-export class LocalAuthStrategy extends PassportStrategy(
-  Strategy,
-  NAME_LOCAL_AUTH_GUARD,
-) {
-  constructor(
-    private readonly userService: UsersService,
-    private readonly bcryptService: BcryptService,
-  ) {
+export class LocalStrategy extends PassportStrategy(Strategy) {
+  constructor(private authService: AuthService) {
     super();
   }
 
-  async validate(username: string, password: string) {
-    const user = await this.userService.findOneWithSelect(username, [
-      'password',
-      'id',
-    ]);
+  async validate(name: string, password: string): Promise<ISanitizedUser> {
+    const user = await this.authService.validateUser(name, password);
     if (!user) {
-      throw new UnauthorizedException(ERROR_MESSAGES.USER.NOT_FOUND);
+      throw new UnauthorizedException();
     }
-    const isComparePassword = await this.bcryptService.comparePass(
-      password,
-      user.password,
-    );
-    if (isComparePassword === false) {
-      throw new UnauthorizedException(ERROR_MESSAGES.USER.NOT_CORRECT);
-    }
-
     return user;
   }
 }

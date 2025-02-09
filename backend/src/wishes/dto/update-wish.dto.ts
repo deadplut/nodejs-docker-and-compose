@@ -1,49 +1,30 @@
-import { Length, IsUrl, Min, IsOptional } from 'class-validator';
-import { ERROR_MESSAGES } from 'src/utils/constants';
-import { stringFormat } from 'src/utils/string-format';
+import { PartialType } from '@nestjs/mapped-types';
+import { IsOptional, IsString, IsUrl, Length, Matches } from 'class-validator';
+import { CreateWishDto } from './create-wish.dto';
 
-export class UpdateWishDto {
-  /** name — название подарка. Не может быть длиннее 250 символов и короче одного. */
-  @Length(1, 250, {
-    message: JSON.stringify({
-      name: stringFormat(ERROR_MESSAGES.VALIDATION.TEXT_LENGTH, 1, 250),
-    }),
-  })
+export class UpdateWishDto extends PartialType(CreateWishDto) {
   @IsOptional()
-  name: string;
-  /** link — ссылка на интернет-магазин, в котором можно приобрести подарок, строка. */
-  @IsUrl(undefined, {
-    message: JSON.stringify({
-      link: stringFormat(
-        ERROR_MESSAGES.VALIDATION.IS_URL,
-        'на интернет-магазин',
-      ),
-    }),
-  })
+  @IsString()
+  @Length(1, 250)
+  name?: string;
+
   @IsOptional()
-  link: string;
-  /** image ссылка на изображение подарка, строка. Должна быть валидным URL. */
-  @IsUrl(undefined, {
-    message: JSON.stringify({
-      image: stringFormat(ERROR_MESSAGES.VALIDATION.IS_URL, 'для картинки'),
-    }),
-  })
+  @IsUrl()
+  link?: string;
+
   @IsOptional()
-  image: string;
-  /** price — стоимость подарка, с округлением до сотых, число. */
-  @Min(1, {
-    message: JSON.stringify({
-      price: stringFormat(ERROR_MESSAGES.VALIDATION.MIN_PRICE, 1),
-    }),
-  })
+  @IsUrl()
+  image?: string;
+
   @IsOptional()
-  price: number;
-  /** description — строка с описанием подарка длиной от 1 и до 1024 символов. */
-  @Length(1, 1024, {
-    message: JSON.stringify({
-      description: stringFormat(ERROR_MESSAGES.VALIDATION.TEXT_LENGTH, 1, 1024),
-    }),
+  @IsString()
+  @Matches(/^\d+(\.\d{1,2})?$/, {
+    message: 'Amount must be a valid number with up to 2 decimal places',
   })
+  price?: number;
+
   @IsOptional()
-  description: string;
+  @IsString()
+  @Length(1, 1024)
+  description?: string;
 }
