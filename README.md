@@ -1,3 +1,3 @@
 IP адрес 51.250.106.165
-Frontend http://api.scp.nomorepartiesco.ru/
-Backend http://scp.nomorepartiesco.ru/
+Frontend http://api.skp.nomorepartiesco.ru/
+Backend http://skp.nomorepartiesco.ru/
